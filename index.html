@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Cámara Alineación</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        #startScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        #startScreen.hidden {
+            display: none !important;
+        }
+
+        #startScreen h1 {
+            color: white;
+            font-size: 28px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #startBtn {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        #cameraView {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+
+        #cameraView.active {
+            display: block !important;
+        }
+
+        #video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            transition: background-color 0.3s;
+            z-index: 1;
+        }
+
+        #overlay.aligned {
+            background-color: rgba(0, 255, 0, 0.25);
+        }
+
+        .top-info {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 15px;
+            z-index: 10;
+            max-width: 90%;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 10;
+        }
+
+        .btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 4px solid white;
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+        }
+
+        #captureBtn {
+            width: 80px;
+            height: 80px;
+            background: white;
+        }
+
+        #captureBtn.ready {
+            background: #4CAF50;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        #resultView {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: none;
+            flex-direction: column;
+            z-index: 100;
+        }
+
+        #resultView.active {
+            display: flex !important;
+        }
+
+        #capturedImage {
+            flex: 1;
+            width: 100%;
+            object-fit: contain;
+        }
+
+        .result-btns {
+            padding: 20px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .result-btn {
+            flex: 1;
+            max-width: 150px;
+            padding: 15px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #downloadBtn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        #retakeBtn {
+            background: #ff5722;
+            color: white;
+        }
+
+        .status {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background: rgba(76, 175, 80, 0.9);
+            color: white;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 15;
+            display: none;
+        }
+
+        .status.show {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Pantalla de inicio -->
+    <div id="startScreen">
+        <h1>📸 Cámara con Guías</h1>
+        <button id="startBtn">Iniciar Cámara</button>
+    </div>
+
+    <!-- Vista de cámara -->
+    <div id="cameraView">
+        <video id="video" playsinline webkit-playsinline muted autoplay></video>
+        <div id="overlay"></div>
+        <canvas id="canvas"></canvas>
+        
+        <div class="top-info" id="topInfo">
+            Centra el punto móvil en el círculo
+        </div>
+        
+        <div class="status" id="status"></div>
+
+        <div class="controls">
+            <div class="btn" id="switchBtn">🔄</div>
+            <div class="btn" id="captureBtn">📷</div>
+        </div>
+    </div>
+
+    <!-- Vista de resultado -->
+    <div id="resultView">
+        <img id="capturedImage">
+        <div class="result-btns">
+            <button id="downloadBtn" class="result-btn">Descargar</button>
+            <button id="retakeBtn" class="result-btn">Otra foto</button>
+        </div>
+    </div>
+
+    <script>
+        console.log('Script iniciado');
+        
+        // Variables
+        let video, canvas, ctx, overlay;
+        let stream = null;
+        let facingMode = 'environment';
+        let isAligned = false;
+        let animationRunning = false;
+
+        // Elementos
+        const startScreen = document.getElementById('startScreen');
+        const startBtn = document.getElementById('startBtn');
+        const cameraView = document.getElementById('cameraView');
+        const captureBtn = document.getElementById('captureBtn');
+        const switchBtn = document.getElementById('switchBtn');
+        const resultView = document.getElementById('resultView');
+        const capturedImage = document.getElementById('capturedImage');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const retakeBtn = document.getElementById('retakeBtn');
+        const status = document.getElementById('status');
+
+        // Configuración
+        const config = {
+            rectWidth: 0.7,
+            rectHeight: 0.5,
+            circleRadius: 50,
+            targetRadius: 15,
+            alignmentThreshold: 40
+        };
+
+        // Inicializar elementos
+        function init() {
+            console.log('Inicializando...');
+            video = document.getElementById('video');
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            overlay = document.getElementById('overlay');
+            
+            console.log('Elementos obtenidos:', {
+                video: !!video,
+                canvas: !!canvas,
+                ctx: !!ctx
+            });
+        }
+
+        // Botón iniciar
+        startBtn.addEventListener('click', async () => {
+            console.log('Botón click');
+            startBtn.disabled = true;
+            startBtn.textContent = 'Iniciando...';
+            
+            try {
+                init();
+                await startCamera();
+                
+                startScreen.classList.add('hidden');
+                cameraView.classList.add('active');
+                
+                setupCanvas();
+                startDrawing();
+                setupControls();
+                
+                showStatus('¡Listo!');
+                console.log('Todo iniciado');
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al iniciar cámara: ' + error.message);
+                startBtn.disabled = false;
+                startBtn.textContent = 'Reintentar';
+            }
+        });
+
+        // Iniciar cámara
+        async function startCamera() {
+            console.log('Iniciando cámara...');
+            
+            const constraints = {
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            };
+
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+
+            return new Promise((resolve, reject) => {
+                video.onloadedmetadata = () => {
+                    video.play().then(resolve).catch(reject);
+                };
+                setTimeout(() => reject(new Error('Timeout')), 10000);
+            });
+        }
+
+        // Configurar canvas
+        function setupCanvas() {
+            const rect = video.getBoundingClientRect();
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            console.log('Canvas:', canvas.width, 'x', canvas.height);
+        }
+
+        // Iniciar dibujo
+        function startDrawing() {
+            if (animationRunning) return;
+            animationRunning = true;
+            console.log('Iniciando animación');
+            draw();
+        }
+
+        // Dibujar frame
+        function draw() {
+            if (!animationRunning) return;
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Limpiar
+            ctx.clearRect(0, 0, w, h);
+
+            // Centro
+            const cx = w / 2;
+            const cy = h / 2;
+
+            // Rectángulo guía
+            const rw = w * config.rectWidth;
+            const rh = h * config.rectHeight;
+            const rx = (w - rw) / 2;
+            const ry = (h - rh) / 2;
+
+            // Punto móvil
+            const t = Date.now() / 1000;
+            const px = cx + Math.sin(t * 2) * 30;
+            const py = cy + Math.cos(t * 1.5) * 30;
+
+            // Calcular distancia
+            const dist = Math.sqrt(Math.pow(px - cx, 2) + Math.pow(py - cy, 2));
+            const newAligned = dist < config.alignmentThreshold;
+
+            if (newAligned !== isAligned) {
+                isAligned = newAligned;
+                if (isAligned) {
+                    overlay.classList.add('aligned');
+                    captureBtn.classList.add('ready');
+                } else {
+                    overlay.classList.remove('aligned');
+                    captureBtn.classList.remove('ready');
+                }
+            }
+
+            // Dibujar rectángulo
+            ctx.strokeStyle = isAligned ? '#00ff00' : '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([10, 5]);
+            ctx.strokeRect(rx, ry, rw, rh);
+            ctx.setLineDash([]);
+
+            // Esquinas
+            const cornerLen = 30;
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = isAligned ? '#00ff00' : '#ffffff';
+            
+            // Superior izquierda
+            ctx.beginPath();
+            ctx.moveTo(rx, ry + cornerLen);
+            ctx.lineTo(rx, ry);
+            ctx.lineTo(rx + cornerLen, ry);
+            ctx.stroke();
+
+            // Superior derecha
+            ctx.beginPath();
+            ctx.moveTo(rx + rw - cornerLen, ry);
+            ctx.lineTo(rx + rw, ry);
+            ctx.lineTo(rx + rw, ry + cornerLen);
+            ctx.stroke();
+
+            // Inferior izquierda
+            ctx.beginPath();
+            ctx.moveTo(rx, ry + rh - cornerLen);
+            ctx.lineTo(rx, ry + rh);
+            ctx.lineTo(rx + cornerLen, ry + rh);
+            ctx.stroke();
+
+            // Inferior derecha
+            ctx.beginPath();
+            ctx.moveTo(rx + rw - cornerLen, ry + rh);
+            ctx.lineTo(rx + rw, ry + rh);
+            ctx.lineTo(rx + rw, ry + rh - cornerLen);
+            ctx.stroke();
+
+            // Círculo central
+            ctx.beginPath();
+            ctx.arc(cx, cy, config.circleRadius, 0, 2 * Math.PI);
+            ctx.strokeStyle = isAligned ? '#00ff00' : '#ff0000';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Cruz central
+            ctx.beginPath();
+            ctx.moveTo(cx - 20, cy);
+            ctx.lineTo(cx + 20, cy);
+            ctx.moveTo(cx, cy - 20);
+            ctx.lineTo(cx, cy + 20);
+            ctx.strokeStyle = isAligned ? '#00ff00' : '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Línea al punto
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(px, py);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Punto móvil
+            ctx.beginPath();
+            ctx.arc(px, py, config.targetRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = isAligned ? '#00ff00' : '#ff6b6b';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Distancia
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(Math.round(dist) + 'px', cx, cy - config.circleRadius - 15);
+
+            requestAnimationFrame(draw);
+        }
+
+        // Configurar controles
+        function setupControls() {
+            captureBtn.addEventListener('click', capture);
+            switchBtn.addEventListener('click', switchCam);
+            downloadBtn.addEventListener('click', download);
+            retakeBtn.addEventListener('click', retake);
+            window.addEventListener('resize', setupCanvas);
+        }
+
+        // Capturar foto
+        function capture() {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = video.videoWidth;
+            tempCanvas.height = video.videoHeight;
+            tempCanvas.getContext('2d').drawImage(video, 0, 0);
+            
+            capturedImage.src = tempCanvas.toDataURL('image/jpeg', 0.95);
+            resultView.classList.add('active');
+            showStatus('¡Foto capturada!');
+        }
+
+        // Cambiar cámara
+        async function switchCam() {
+            facingMode = facingMode === 'environment' ? 'user' : 'environment';
+            try {
+                if (stream) {
+                    stream.getTracks().forEach(t => t.stop());
+                }
+                await startCamera();
+                showStatus('Cámara cambiada');
+            } catch (error) {
+                console.error('Error:', error);
+                facingMode = facingMode === 'environment' ? 'user' : 'environment';
+            }
+        }
+
+        // Descargar
+        function download() {
+            const link = document.createElement('a');
+            link.download = `foto-${Date.now()}.jpg`;
+            link.href = capturedImage.src;
+            link.click();
+            showStatus('Descargado');
+        }
+
+        // Retomar
+        function retake() {
+            resultView.classList.remove('active');
+        }
+
+        // Mostrar status
+        function showStatus(msg) {
+            status.textContent = msg;
+            status.classList.add('show');
+            setTimeout(() => status.classList.remove('show'), 2000);
+        }
+
+        // Limpieza
+        window.addEventListener('beforeunload', () => {
+            animationRunning = false;
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+            }
+        });
+
+        console.log('Script cargado completamente');
+    </script>
+</body>
+</html>
