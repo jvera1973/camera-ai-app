@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>Cámara con Detección de Objetos</title>
+    <title>Cámara Alineación</title>
     <style>
         * {
             margin: 0;
@@ -52,13 +52,6 @@
         #startScreen h1 {
             color: white;
             font-size: 28px;
-            margin-bottom: 10px;
-            text-align: center;
-        }
-
-        #startScreen .subtitle {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 14px;
             margin-bottom: 20px;
             text-align: center;
         }
@@ -87,11 +80,6 @@
 
         #startBtn:active {
             transform: scale(0.95);
-        }
-
-        #startBtn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
         }
 
         #cameraContainer {
@@ -151,38 +139,13 @@
 
         .instructions {
             color: white;
-            font-size: 15px;
+            font-size: 16px;
             text-align: center;
             padding: 10px 15px;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.6);
             border-radius: 10px;
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-        }
-
-        .detection-info {
-            position: absolute;
-            top: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 8px 15px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: bold;
-            z-index: 11;
-            max-width: 90%;
-            text-align: center;
-            display: none;
-        }
-
-        .detection-info.show {
-            display: block;
-        }
-
-        .detection-info.detected {
-            background: rgba(76, 175, 80, 0.9);
         }
 
         .bottom-controls {
@@ -232,17 +195,11 @@
             background: #4CAF50;
             border-color: #4CAF50;
             box-shadow: 0 0 20px rgba(76, 175, 80, 0.6);
-            animation: pulse 1.5s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
         }
 
         #status {
             position: absolute;
-            top: 130px;
+            top: 100px;
             left: 50%;
             transform: translateX(-50%);
             padding: 10px 20px;
@@ -338,52 +295,14 @@
             border-radius: 10px;
             margin: 20px;
         }
-
-        .loading-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 50;
-        }
-
-        .loading-overlay.hidden {
-            display: none;
-        }
-
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .loading-text {
-            color: white;
-            margin-top: 20px;
-            font-size: 16px;
-        }
     </style>
 </head>
 <body>
     <div id="app">
         <!-- Pantalla de inicio -->
         <div id="startScreen">
-            <h1>📸 Cámara Inteligente</h1>
-            <div class="subtitle">Con detección de objetos IA</div>
-            <p>Esta app detectará objetos automáticamente y te ayudará a alinearlos perfectamente</p>
+            <h1>📸 Cámara con Guías</h1>
+            <p>Esta app te ayudará a alinear objetos perfectamente usando guías visuales</p>
             <button id="startBtn">Iniciar Cámara</button>
         </div>
 
@@ -393,18 +312,12 @@
             <canvas id="overlayCanvas"></canvas>
             <div id="overlay"></div>
             
-            <div class="loading-overlay" id="loadingOverlay">
-                <div class="spinner"></div>
-                <div class="loading-text">Cargando modelo de IA...</div>
-            </div>
-
             <div class="top-bar">
                 <div class="instructions">
-                    Detectando objetos... Centra el objeto principal
+                    Alinea el punto móvil dentro del círculo
                 </div>
             </div>
 
-            <div class="detection-info" id="detectionInfo"></div>
             <div id="status"></div>
 
             <div class="bottom-controls">
@@ -423,34 +336,24 @@
         </div>
     </div>
 
-    <!-- TensorFlow.js y COCO-SSD -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
-
     <script>
         // Variables globales
-        let video, canvas, ctx, overlay, status, detectionInfo, loadingOverlay;
+        let video, canvas, ctx, overlay, status;
         let captureBtn, switchBtn, downloadBtn, retakeBtn;
         let stream = null;
         let facingMode = 'environment';
         let isAligned = false;
         let animationId = null;
         let isInitialized = false;
-        let model = null;
-        let detectedObjects = [];
-        let primaryObject = null;
 
         // Configuración
         const config = {
             rectWidth: 0.7,
             rectHeight: 0.5,
-            circleRadius: 50,
-            alignmentThreshold: 80,
-            detectionInterval: 100, // ms entre detecciones
-            confidenceThreshold: 0.5 // confianza mínima para detectar objetos
+            circleRadius: 40,
+            targetRadius: 15,
+            alignmentThreshold: 35
         };
-
-        let lastDetectionTime = 0;
 
         // Inicialización cuando el DOM esté listo
         document.addEventListener('DOMContentLoaded', function() {
@@ -465,8 +368,6 @@
             ctx = canvas.getContext('2d');
             overlay = document.getElementById('overlay');
             status = document.getElementById('status');
-            detectionInfo = document.getElementById('detectionInfo');
-            loadingOverlay = document.getElementById('loadingOverlay');
             captureBtn = document.getElementById('captureBtn');
             switchBtn = document.getElementById('switchBtn');
             downloadBtn = document.getElementById('downloadBtn');
@@ -484,24 +385,16 @@
                 startBtn.textContent = 'Iniciando...';
 
                 try {
-                    // Iniciar cámara primero
                     await initCamera();
                     startScreen.classList.add('hidden');
                     cameraContainer.classList.add('active');
-                    
                     setupCanvas();
-                    setupControls();
-                    
-                    // Cargar modelo de IA
-                    await loadAIModel();
-                    
-                    // Iniciar detección
                     startDetection();
+                    setupControls();
                     isInitialized = true;
-                    
-                    console.log('Todo iniciado correctamente');
+                    console.log('Cámara iniciada correctamente');
                 } catch (error) {
-                    console.error('Error al iniciar:', error);
+                    console.error('Error al iniciar cámara:', error);
                     handleCameraError(error);
                     startBtn.disabled = false;
                     startBtn.textContent = 'Reintentar';
@@ -509,28 +402,10 @@
             });
         }
 
-        async function loadAIModel() {
-            try {
-                console.log('Cargando modelo COCO-SSD...');
-                loadingOverlay.classList.remove('hidden');
-                
-                model = await cocoSsd.load({
-                    base: 'mobilenet_v2' // Más rápido para móviles
-                });
-                
-                console.log('Modelo cargado correctamente');
-                loadingOverlay.classList.add('hidden');
-                showStatus('Modelo de IA cargado ✓', 'success');
-            } catch (error) {
-                console.error('Error al cargar modelo:', error);
-                loadingOverlay.classList.add('hidden');
-                showStatus('Error al cargar IA. Detección básica activada.', 'error');
-            }
-        }
-
         async function initCamera() {
             console.log('Iniciando cámara...');
             
+            // Verificar soporte
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 throw new Error('Tu navegador no soporta acceso a la cámara');
             }
@@ -548,6 +423,7 @@
                 stream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = stream;
 
+                // Esperar a que el video esté listo
                 await new Promise((resolve, reject) => {
                     video.onloadedmetadata = function() {
                         console.log('Metadata cargada');
@@ -564,6 +440,7 @@
                         reject(new Error('Error al cargar el video'));
                     };
 
+                    // Timeout de seguridad
                     setTimeout(() => {
                         if (video.readyState < 2) {
                             reject(new Error('Timeout al iniciar la cámara'));
@@ -619,73 +496,10 @@
             window.addEventListener('resize', setupCanvas);
         }
 
-        async function detectObjects() {
-            if (!model || !video.readyState === 4) return;
-
-            const now = Date.now();
-            if (now - lastDetectionTime < config.detectionInterval) return;
-            lastDetectionTime = now;
-
-            try {
-                const predictions = await model.detect(video);
-                detectedObjects = predictions.filter(pred => pred.score >= config.confidenceThreshold);
-                
-                // Encontrar el objeto más grande y centrado
-                if (detectedObjects.length > 0) {
-                    primaryObject = findPrimaryObject(detectedObjects);
-                } else {
-                    primaryObject = null;
-                }
-            } catch (error) {
-                console.error('Error en detección:', error);
-            }
-        }
-
-        function findPrimaryObject(objects) {
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-
-            // Calcular score basado en tamaño, confianza y proximidad al centro
-            let bestObject = null;
-            let bestScore = -1;
-
-            objects.forEach(obj => {
-                const [x, y, width, height] = obj.bbox;
-                const objCenterX = x + width / 2;
-                const objCenterY = y + height / 2;
-                
-                // Distancia al centro
-                const distToCenter = Math.sqrt(
-                    Math.pow(objCenterX - centerX, 2) + 
-                    Math.pow(objCenterY - centerY, 2)
-                );
-                
-                // Score combinado (área, confianza, proximidad)
-                const area = width * height;
-                const maxDist = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
-                const proximityScore = 1 - (distToCenter / maxDist);
-                
-                const score = (area / 10000) * obj.score * proximityScore;
-                
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestObject = obj;
-                }
-            });
-
-            return bestObject;
-        }
-
         function startDetection() {
-            async function animate() {
+            function animate() {
                 if (!isInitialized) return;
-                
-                // Detectar objetos
-                await detectObjects();
-                
-                // Dibujar
                 drawGuides();
-                
                 animationId = requestAnimationFrame(animate);
             }
             animate();
@@ -698,141 +512,93 @@
 
             ctx.clearRect(0, 0, width, height);
 
-            // Calcular escala del video al canvas
-            const scaleX = width / video.videoWidth;
-            const scaleY = height / video.videoHeight;
-
-            // Rectángulo guía
+            // Rectángulo
             const rectW = width * config.rectWidth;
             const rectH = height * config.rectHeight;
             const rectX = (width - rectW) / 2;
             const rectY = (height - rectH) / 2;
 
-            // Centro
-            const centerX = width / 2;
-            const centerY = height / 2;
-
-            // Verificar alineación
-            let objectCenter = null;
-            if (primaryObject) {
-                const [x, y, w, h] = primaryObject.bbox;
-                objectCenter = {
-                    x: (x + w / 2) * scaleX,
-                    y: (y + h / 2) * scaleY
-                };
-
-                const distance = Math.sqrt(
-                    Math.pow(objectCenter.x - centerX, 2) + 
-                    Math.pow(objectCenter.y - centerY, 2)
-                );
-
-                const newAligned = distance < config.alignmentThreshold;
-                
-                if (newAligned !== isAligned) {
-                    isAligned = newAligned;
-                    updateAlignment();
-                }
-
-                // Dibujar bounding box del objeto detectado
-                ctx.strokeStyle = isAligned ? '#00ff00' : '#ff9800';
-                ctx.lineWidth = 3;
-                ctx.strokeRect(x * scaleX, y * scaleY, w * scaleX, h * scaleY);
-
-                // Etiqueta del objeto
-                ctx.fillStyle = isAligned ? '#00ff00' : '#ff9800';
-                ctx.font = 'bold 16px Arial';
-                const label = `${primaryObject.class} (${Math.round(primaryObject.score * 100)}%)`;
-                const textWidth = ctx.measureText(label).width;
-                ctx.fillRect(x * scaleX, y * scaleY - 25, textWidth + 10, 25);
-                ctx.fillStyle = '#000';
-                ctx.fillText(label, x * scaleX + 5, y * scaleY - 7);
-
-                // Mostrar info de detección
-                detectionInfo.textContent = `Detectado: ${primaryObject.class}`;
-                detectionInfo.classList.add('show');
-                if (isAligned) {
-                    detectionInfo.classList.add('detected');
-                } else {
-                    detectionInfo.classList.remove('detected');
-                }
-            } else {
-                detectionInfo.classList.remove('show', 'detected');
-                if (isAligned) {
-                    isAligned = false;
-                    updateAlignment();
-                }
-            }
-
-            // Dibujar rectángulo guía
             ctx.strokeStyle = isAligned ? '#00ff00' : '#ffffff';
             ctx.lineWidth = 2;
             ctx.setLineDash([10, 5]);
             ctx.strokeRect(rectX, rectY, rectW, rectH);
             ctx.setLineDash([]);
 
-            // Esquinas del rectángulo
+            // Esquinas
             const cornerLen = 25;
             ctx.lineWidth = 3;
             drawCorners(ctx, rectX, rectY, rectW, rectH, cornerLen);
 
-            // Círculo objetivo central
+            // Centro
+            const centerX = width / 2;
+            const centerY = height / 2;
+
+            // Círculo objetivo
             ctx.beginPath();
             ctx.arc(centerX, centerY, config.circleRadius, 0, 2 * Math.PI);
             ctx.strokeStyle = isAligned ? '#00ff00' : '#ff0000';
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            // Cruz central
+            // Punto móvil simulado
+            const time = Date.now() / 1000;
+            const offsetX = Math.sin(time * 2) * 25;
+            const offsetY = Math.cos(time * 1.5) * 25;
+            
+            const targetX = centerX + offsetX;
+            const targetY = centerY + offsetY;
+
+            const distance = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
+            const newAligned = distance < config.alignmentThreshold;
+
+            if (newAligned !== isAligned) {
+                isAligned = newAligned;
+                updateAlignment();
+            }
+
+            // Dibujar punto
             ctx.beginPath();
-            ctx.moveTo(centerX - 15, centerY);
-            ctx.lineTo(centerX + 15, centerY);
-            ctx.moveTo(centerX, centerY - 15);
-            ctx.lineTo(centerX, centerY + 15);
-            ctx.strokeStyle = isAligned ? '#00ff00' : '#ffffff';
+            ctx.arc(targetX, targetY, config.targetRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = isAligned ? '#00ff00' : '#ff6b6b';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            // Si hay objeto, dibujar línea al centro
-            if (objectCenter) {
-                ctx.beginPath();
-                ctx.moveTo(centerX, centerY);
-                ctx.lineTo(objectCenter.x, objectCenter.y);
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-
-                // Punto en el centro del objeto
-                ctx.beginPath();
-                ctx.arc(objectCenter.x, objectCenter.y, 8, 0, 2 * Math.PI);
-                ctx.fillStyle = isAligned ? '#00ff00' : '#ff6b6b';
-                ctx.fill();
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-            }
+            // Línea al centro
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(targetX, targetY);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
         }
 
         function drawCorners(ctx, x, y, w, h, len) {
+            // Superior izquierda
             ctx.beginPath();
             ctx.moveTo(x, y + len);
             ctx.lineTo(x, y);
             ctx.lineTo(x + len, y);
             ctx.stroke();
 
+            // Superior derecha
             ctx.beginPath();
             ctx.moveTo(x + w - len, y);
             ctx.lineTo(x + w, y);
             ctx.lineTo(x + w, y + len);
             ctx.stroke();
 
+            // Inferior izquierda
             ctx.beginPath();
             ctx.moveTo(x, y + h - len);
             ctx.lineTo(x, y + h);
             ctx.lineTo(x + len, y + h);
             ctx.stroke();
 
+            // Inferior derecha
             ctx.beginPath();
             ctx.moveTo(x + w - len, y + h);
             ctx.lineTo(x + w, y + h);
@@ -861,8 +627,7 @@
             document.getElementById('capturedImage').src = imageData;
             document.getElementById('resultScreen').classList.add('active');
             
-            const objectName = primaryObject ? primaryObject.class : 'objeto';
-            showStatus(`¡Foto de ${objectName} capturada!`, 'success');
+            showStatus('¡Foto capturada!', 'success');
         }
 
         async function switchCamera() {
@@ -882,8 +647,7 @@
 
         function downloadPhoto() {
             const link = document.createElement('a');
-            const objectName = primaryObject ? primaryObject.class : 'foto';
-            link.download = `${objectName}-${Date.now()}.jpg`;
+            link.download = `foto-${Date.now()}.jpg`;
             link.href = document.getElementById('capturedImage').src;
             link.click();
             showStatus('Foto guardada', 'success');
