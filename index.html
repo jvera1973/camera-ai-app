@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Cámara con Detección IA</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        #startScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        #startScreen.hidden {
+            display: none !important;
+        }
+
+        #startScreen h1 {
+            color: white;
+            font-size: 28px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        #startScreen .subtitle {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        #startBtn {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        #cameraView {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+
+        #cameraView.active {
+            display: block !important;
+        }
+
+        #video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            transition: background-color 0.3s;
+            z-index: 1;
+        }
+
+        #overlay.aligned {
+            background-color: rgba(0, 255, 0, 0.25);
+        }
+
+        .top-info {
+            position: absolute;
+            top: env(safe-area-inset-top, 20px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 15px;
+            z-index: 10;
+            max-width: 90%;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+
+        #detectionLabel {
+            position: absolute;
+            top: calc(env(safe-area-inset-top, 20px) + 60px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 152, 0, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 10;
+            display: none;
+        }
+
+        #detectionLabel.show {
+            display: block;
+        }
+
+        #detectionLabel.aligned {
+            background: rgba(76, 175, 80, 0.9);
+        }
+
+        .controls {
+            position: absolute;
+            bottom: calc(env(safe-area-inset-bottom, 20px) + 20px);
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 10;
+        }
+
+        .btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 4px solid white;
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.2s;
+        }
+
+        .btn:active {
+            transform: scale(0.9);
+        }
+
+        #captureBtn {
+            width: 80px;
+            height: 80px;
+            background: white;
+        }
+
+        #captureBtn.ready {
+            background: #4CAF50;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        #resultView {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: none;
+            flex-direction: column;
+            z-index: 100;
+        }
+
+        #resultView.active {
+            display: flex !important;
+        }
+
+        #capturedImage {
+            flex: 1;
+            width: 100%;
+            object-fit: contain;
+        }
+
+        .result-btns {
+            padding: 20px 20px calc(env(safe-area-inset-bottom, 20px) + 20px) 20px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .result-btn {
+            flex: 1;
+            max-width: 150px;
+            padding: 15px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #downloadBtn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        #retakeBtn {
+            background: #ff5722;
+            color: white;
+        }
+
+        .status {
+            position: absolute;
+            top: calc(env(safe-area-inset-top, 20px) + 120px);
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background: rgba(76, 175, 80, 0.9);
+            color: white;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 15;
+            display: none;
+            max-width: 90%;
+            text-align: center;
+        }
+
+        .status.show {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        .status.error {
+            background: rgba(244, 67, 54, 0.9);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            z-index: 20;
+            display: none;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Pantalla de inicio -->
+    <div id="startScreen">
+        <h1>📸 Cámara Inteligente</h1>
+        <div class="subtitle">Con detección de objetos IA</div>
+        <button id="startBtn">Iniciar Cámara</button>
+    </div>
+
+    <!-- Vista de cámara -->
+    <div id="cameraView">
+        <video id="video" playsinline webkit-playsinline muted autoplay></video>
+        <div id="overlay"></div>
+        <canvas id="canvas"></canvas>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div>Cargando modelo de IA...</div>
+        </div>
+        
+        <div class="top-info" id="topInfo">
+            Apunta a un objeto para detectarlo
+        </div>
+        
+        <div id="detectionLabel"></div>
+        <div class="status" id="status"></div>
+
+        <div class="controls">
+            <div class="btn" id="switchBtn">🔄</div>
+            <div class="btn" id="captureBtn">📷</div>
+        </div>
+    </div>
+
+    <!-- Vista de resultado -->
+    <div id="resultView">
+        <img id="capturedImage">
+        <div class="result-btns">
+            <button id="downloadBtn" class="result-btn">Descargar</button>
+            <button id="retakeBtn" class="result-btn">Otra foto</button>
+        </div>
+    </div>
+
+    <!-- Cargar TensorFlow.js y COCO-SSD -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
+    <script>
+        console.log('🚀 App iniciada');
+        
+        // Variables
+        let video, canvas, ctx, overlay, topInfo, detectionLabel, loading;
+        let stream = null;
+        let facingMode = 'environment';
+        let isAligned = false;
+        let animationRunning = false;
+        let model = null;
+        let lastDetectionTime = 0;
+        let detectedObjects = [];
+        let primaryObject = null;
+
+        // Elementos
+        const startScreen = document.getElementById('startScreen');
+        const startBtn = document.getElementById('startBtn');
+        const cameraView = document.getElementById('cameraView');
+        const captureBtn = document.getElementById('captureBtn');
+        const switchBtn = document.getElementById('switchBtn');
+        const resultView = document.getElementById('resultView');
+        const capturedImage = document.getElementById('capturedImage');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const retakeBtn = document.getElementById('retakeBtn');
+        const status = document.getElementById('status');
+
+        // Configuración
+        const config = {
+            rectWidth: 0.7,
+            rectHeight: 0.5,
+            circleRadius: 60,
+            alignmentThreshold: 80,
+            detectionInterval: 200, // ms entre detecciones
+            confidenceThreshold: 0.5
+        };
+
+        // Inicializar elementos
+        function init() {
+            console.log('📦 Inicializando elementos...');
+            video = document.getElementById('video');
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            overlay = document.getElementById('overlay');
+            topInfo = document.getElementById('topInfo');
+            detectionLabel = document.getElementById('detectionLabel');
+            loading = document.getElementById('loading');
+        }
+
+        // Botón iniciar
+        startBtn.addEventListener('click', async () => {
+            console.log('▶️ Botón iniciar presionado');
+            startBtn.disabled = true;
+            startBtn.textContent = 'Iniciando...';
+            
+            try {
+                init();
+                await startCamera();
+                
+                startScreen.classList.add('hidden');
+                cameraView.classList.add('active');
+                
+                setupCanvas();
+                setupControls();
+                
+                // Cargar modelo IA en segundo plano
+                loadAIModel();
+                
+                // Iniciar dibujo inmediatamente (sin esperar IA)
+                startDrawing();
+                
+                showStatus('✓ Cámara lista');
+                console.log('✅ Todo iniciado correctamente');
+            } catch (error) {
+                console.error('❌ Error:', error);
+                alert('Error al iniciar cámara: ' + error.message);
+                startBtn.disabled = false;
+                startBtn.textContent = 'Reintentar';
+            }
+        });
+
+        // Cargar modelo de IA
+        async function loadAIModel() {
+            try {
+                console.log('🤖 Cargando modelo COCO-SSD...');
+                loading.classList.add('show');
+                
+                // Verificar que TensorFlow esté disponible
+                if (typeof tf === 'undefined') {
+                    throw new Error('TensorFlow.js no cargó correctamente');
+                }
+                console.log('✓ TensorFlow.js versión:', tf.version.tfjs);
+                
+                if (typeof cocoSsd === 'undefined') {
+                    throw new Error('COCO-SSD no cargó correctamente');
+                }
+                
+                model = await cocoSsd.load({
+                    base: 'lite_mobilenet_v2'
+                });
+                
+                console.log('✅ Modelo IA cargado correctamente');
+                loading.classList.remove('show');
+                showStatus('✓ IA activada');
+                topInfo.textContent = 'Apunta a un objeto - IA activada';
+            } catch (error) {
+                console.error('⚠️ Error al cargar IA:', error);
+                loading.classList.remove('show');
+                showStatus('⚠️ Continuando sin IA', true);
+                topInfo.textContent = 'Modo manual - Centra el objeto';
+                model = null;
+            }
+        }
+
+        // Iniciar cámara
+        async function startCamera() {
+            console.log('📹 Iniciando cámara...');
+            
+            const constraints = {
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            };
+
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+
+            return new Promise((resolve, reject) => {
+                video.onloadedmetadata = () => {
+                    video.play().then(() => {
+                        console.log('✓ Video reproduciendo');
+                        resolve();
+                    }).catch(reject);
+                };
+                setTimeout(() => reject(new Error('Timeout')), 10000);
+            });
+        }
+
+        // Configurar canvas
+        function setupCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            console.log('📐 Canvas:', canvas.width, 'x', canvas.height);
+        }
+
+        // Iniciar dibujo
+        function startDrawing() {
+            if (animationRunning) return;
+            animationRunning = true;
+            console.log('🎨 Iniciando animación');
+            draw();
+        }
+
+        // Detectar objetos con IA
+        async function detectObjects() {
+            if (!model || !video || video.readyState !== 4) {
+                return;
+            }
+
+            const now = Date.now();
+            if (now - lastDetectionTime < config.detectionInterval) return;
+            lastDetectionTime = now;
+
+            try {
+                const predictions = await model.detect(video);
+                detectedObjects = predictions.filter(p => p.score >= config.confidenceThreshold);
+                
+                if (detectedObjects.length > 0) {
+                    primaryObject = findBestObject(detectedObjects);
+                } else {
+                    primaryObject = null;
+                }
+            } catch (error) {
+                console.error('Error en detección:', error);
+            }
+        }
+
+        // Encontrar el mejor objeto (más grande y centrado)
+        function findBestObject(objects) {
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            let best = null;
+            let bestScore = -1;
+
+            objects.forEach(obj => {
+                const [x, y, w, h] = obj.bbox;
+                const objCx = x + w / 2;
+                const objCy = y + h / 2;
+                
+                // Distancia al centro
+                const dist = Math.sqrt(Math.pow(objCx - cx, 2) + Math.pow(objCy - cy, 2));
+                const maxDist = Math.sqrt(cx * cx + cy * cy);
+                const proximityScore = 1 - (dist / maxDist);
+                
+                // Score combinado
+                const area = w * h;
+                const score = (area / 10000) * obj.score * proximityScore;
+                
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = obj;
+                }
+            });
+
+            return best;
+        }
+
+        // Dibujar frame
+        async function draw() {
+            if (!animationRunning) return;
+
+            // Detectar objetos si hay modelo
+            if (model) {
+                await detectObjects();
+            }
+
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Limpiar
+            ctx.clearRect(0, 0, w, h);
+
+            // Centro
+            const cx = w / 2;
+            const cy = h / 2;
+
+            // Escala del video
+            const scaleX = w / video.videoWidth;
+            const scaleY = h / video.videoHeight;
+
+            // Rectángulo guía
+            const rw = w * config.rectWidth;
+            const rh = h * config.rectHeight;
+            const rx = (w - rw) / 2;
+            const ry = (h - rh) / 2;
+
+            let objectCenter = null;
+
+            // Si hay objeto detectado por IA
+            if (primaryObject) {
+                const [x, y, objW, objH] = primaryObject.bbox;
+                
+                // Centro del objeto en coordenadas de canvas
+                objectCenter = {
+                    x: (x + objW / 2) * scaleX,
+                    y: (y + objH / 2) * scaleY
+                };
+
+                // Calcular distancia al centro
+                const dist = Math.sqrt(
+                    Math.pow(objectCenter.x - cx, 2) + 
+                    Math.pow(objectCenter.y - cy, 2)
+                );
+
+                const newAligned = dist < config.alignmentThreshold;
+                
+                if (newAligned !== isAligned) {
+                    isAligned = newAligned;
+                    updateAlignment();
+                }
+
+                // Dibujar bounding box del objeto
+                ctx.strokeStyle = isAligned ? '#00ff00' : '#ff9800';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x * scaleX, y * scaleY, objW * scaleX, objH * scaleY);
+
+                // Etiqueta del objeto
+                const label = `${primaryObject.class} ${Math.round(primaryObject.score * 100)}%`;
+                ctx.font = 'bold 16px Arial';
+                const textWidth = ctx.measureText(label).width;
+                
+                ctx.fillStyle = isAligned ? '#00ff00' : '#ff9800';
+                ctx.fillRect(x * scaleX, y * scaleY - 25, textWidth + 10, 25);
+                
+                ctx.fillStyle = '#000';
+                ctx.fillText(label, x * scaleX + 5, y * scaleY - 7);
+
+                // Mostrar etiqueta de detección
+                detectionLabel.textContent = `Detectado: ${primaryObject.class}`;
+                detectionLabel.classList.add('show');
+                if (isAligned) {
+                    detectionLabel.classList.add('aligned');
+                } else {
+                    detectionLabel.classList.remove('aligned');
+                }
+            } else {
+                detectionLabel.classList.remove('show', 'aligned');
+                
+                if (isAligned) {
+                    isAligned = false;
+                    updateAlignment();
+                }
+            }
+
+            // SIEMPRE dibujar guías
+            ctx.strokeStyle = isAligned ? '#00ff00' : '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([10, 5]);
+            ctx.strokeRect(rx, ry, rw, rh);
+            ctx.setLineDash([]);
+
+            // Esquinas
+            const cornerLen = 30;
+            ctx.lineWidth = 4;
+            drawCorners(rx, ry, rw, rh, cornerLen);
+
+            // Círculo central
+            ctx.beginPath();
+            ctx.arc(cx, cy, config.circleRadius, 0, 2 * Math.PI);
+            ctx.strokeStyle = isAligned ? '#00ff00' : '#ff0000';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Cruz central
+            ctx.beginPath();
+            ctx.moveTo(cx - 20, cy);
+            ctx.lineTo(cx + 20, cy);
+            ctx.moveTo(cx, cy - 20);
+            ctx.lineTo(cx, cy + 20);
+            ctx.strokeStyle = isAligned ? '#00ff00' : '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Si hay centro de objeto, dibujarlo
+            if (objectCenter) {
+                // Línea al centro
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(objectCenter.x, objectCenter.y);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Punto en el centro del objeto
+                ctx.beginPath();
+                ctx.arc(objectCenter.x, objectCenter.y, 12, 0, 2 * Math.PI);
+                ctx.fillStyle = isAligned ? '#00ff00' : '#ff6b6b';
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // Dibujar esquinas
+        function drawCorners(x, y, w, h, len) {
+            ctx.strokeStyle = isAligned ? '#00ff00' : '#ffffff';
+            
+            ctx.beginPath();
+            ctx.moveTo(x, y + len);
+            ctx.lineTo(x, y);
+            ctx.lineTo(x + len, y);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(x + w - len, y);
+            ctx.lineTo(x + w, y);
+            ctx.lineTo(x + w, y + len);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(x, y + h - len);
+            ctx.lineTo(x, y + h);
+            ctx.lineTo(x + len, y + h);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(x + w - len, y + h);
+            ctx.lineTo(x + w, y + h);
+            ctx.lineTo(x + w, y + h - len);
+            ctx.stroke();
+        }
+
+        // Actualizar estado de alineación
+        function updateAlignment() {
+            if (isAligned) {
+                overlay.classList.add('aligned');
+                captureBtn.classList.add('ready');
+            } else {
+                overlay.classList.remove('aligned');
+                captureBtn.classList.remove('ready');
+            }
+        }
+
+        // Configurar controles
+        function setupControls() {
+            captureBtn.addEventListener('click', capture);
+            switchBtn.addEventListener('click', switchCam);
+            downloadBtn.addEventListener('click', download);
+            retakeBtn.addEventListener('click', retake);
+            window.addEventListener('resize', setupCanvas);
+        }
+
+        // Capturar foto
+        function capture() {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = video.videoWidth;
+            tempCanvas.height = video.videoHeight;
+            tempCanvas.getContext('2d').drawImage(video, 0, 0);
+            
+            capturedImage.src = tempCanvas.toDataURL('image/jpeg', 0.95);
+            resultView.classList.add('active');
+            
+            const objName = primaryObject ? primaryObject.class : 'objeto';
+            showStatus(`✓ Foto de ${objName} capturada`);
+        }
+
+        // Cambiar cámara
+        async function switchCam() {
+            facingMode = facingMode === 'environment' ? 'user' : 'environment';
+            try {
+                if (stream) {
+                    stream.getTracks().forEach(t => t.stop());
+                }
+                await startCamera();
+                showStatus('✓ Cámara cambiada');
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus('Error al cambiar cámara', true);
+                facingMode = facingMode === 'environment' ? 'user' : 'environment';
+            }
+        }
+
+        // Descargar
+        function download() {
+            const link = document.createElement('a');
+            const objName = primaryObject ? primaryObject.class : 'foto';
+            link.download = `${objName}-${Date.now()}.jpg`;
+            link.href = capturedImage.src;
+            link.click();
+            showStatus('✓ Descargado');
+        }
+
+        // Retomar
+        function retake() {
+            resultView.classList.remove('active');
+        }
+
+        // Mostrar status
+        function showStatus(msg, isError = false) {
+            status.textContent = msg;
+            status.className = 'status show' + (isError ? ' error' : '');
+            setTimeout(() => status.className = 'status', 3000);
+        }
+
+        // Limpieza
+        window.addEventListener('beforeunload', () => {
+            animationRunning = false;
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+            }
+        });
+
+        console.log('✅ Script cargado');
+    </script>
+</body>
+</html>
